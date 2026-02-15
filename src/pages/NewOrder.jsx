@@ -12,10 +12,11 @@ import { useNewOrderStore } from "../store/new-order/useNewOrderStore";
 import { useLoyaltyStore } from "../store/services/useLoyaltyStore";
 import { useServiceStore } from "../store/services/useServiceStore";
 import { useNotificationStore } from "../store/ui/useNotificationStore";
-import { startGlobalTour } from "../tours/globalTours";
+
+// IMPORT: The new process-based tour trigger
+import { startNewOrderTour } from "../utils/tour"; 
 
 import ClearCartModal from "../components/orders/ClearCartModal";
-// import { printThermalReceipt } from "../components/orders/receiptService";
 import { NewOrderSkeleton } from "../components/skeleton-loader";
 
 // --- Helper Functions ---
@@ -102,10 +103,18 @@ export default function NewOrder() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [isPaid, setIsPaid] = useState(true); 
 
+  // --- NEW: NEW ORDER TOUR TRIGGER ---
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        // Triggering the tour directly when they enter this page
+        startNewOrderTour();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // --- VALIDATION & DUPLICATE LOGIC ---
   const isFormIncomplete = !customer.name.trim() || customer.phone.length < 11;
   
-  // FIX: Only flag duplicate if phone matches AND it's NOT the selected customer
   const isPhoneDuplicate = customers.some(c => {
     const dbPhoneClean = String(c.phone || "").replace(/\D/g, "");
     const inputPhoneClean = String(customer.phone || "").replace(/\D/g, "");
@@ -231,8 +240,6 @@ export default function NewOrder() {
       await submitOrder(orderPayload);
       logActivity(orderPayload, 'pending');
 
-      // printThermalReceipt(orderPayload); 
-
       showNotification(`Order ${uniqueOrderNumber} created!`, "success");
       navigate("/main/orders");
 
@@ -264,15 +271,6 @@ export default function NewOrder() {
     return () => window.removeEventListener("keydown", handleGlobalKeyPress);
   }, []);
 
-  const [forceReveal, setForceReveal] = useState(false);
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    if (searchParams.get('tour') === 'active') {
-      setForceReveal(true);
-      setTimeout(() => startGlobalTour(navigate, 3), 700);
-    }
-  }, [location.search, navigate]);
-
   if (isLoading && shouldShowSkeleton) {
     return <NewOrderSkeleton />;
   }
@@ -289,10 +287,15 @@ export default function NewOrder() {
             <h1 className="text-h2 text-text-dark">New Order</h1>
             <p className="text-sm-text text-gray-600 mt-0.5">Create a new laundry order</p>
           </div>
+          {/* Helper button to manually restart tour if needed */}
+          <Button variant="outline" size="sm" onClick={startNewOrderTour}>
+             Help Tutorial
+          </Button>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-4 items-start">
           <div className="lg:col-span-2 space-y-4">
+            {/* Step 1: Customer Details ID */}
             <div id="step-customer">
               <CustomerForm 
                 customer={customer} setCustomer={setCustomer}
@@ -302,10 +305,10 @@ export default function NewOrder() {
               />
             </div>
             
-            {(selectedCustomerData || forceReveal) && (
+            {selectedCustomerData && (
               <div id="step-loyalty" className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <LoyaltyStatus 
-                  customer={selectedCustomerData || { name: "Tour Demo", loyalty_points: 0 }} 
+                  customer={selectedCustomerData} 
                   loyaltySettings={loyaltySettings} 
                   Button={Button} Badge={Badge}
                   onApplyFreeService={handleApplyReward}
@@ -314,6 +317,7 @@ export default function NewOrder() {
               </div>
             )}
             
+            {/* Step 2: Services & Weight ID */}
             <div id="step-services">
               <ServiceSelector 
                 services={services} 
@@ -327,6 +331,7 @@ export default function NewOrder() {
           </div>
 
           <div className="lg:col-span-1">
+            {/* Step 3: Closing the Sale ID */}
             <div id="step-summary">
               <OrderSummary 
                 customer={customer} 
